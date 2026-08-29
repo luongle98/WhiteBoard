@@ -430,7 +430,7 @@ pdf.save(`${t.name.replace(/[^\w]/g,'_')}.pdf`);
 document.getElementById('save-btn').onclick=()=>{const t=activeTab();showToast('Đang xuất PDF...');setTimeout(()=>{exportTabToPDF(t).then(()=>showToast('Đã lưu PDF')).catch(err=>{console.error(err);showToast('Lỗi khi xuất PDF');});},30);};
 document.getElementById('load-btn').onclick=()=>document.getElementById('file-load').click();
 document.getElementById('file-load').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;const data=JSON.parse(await file.text()),t=newTab(data.name||'Loaded');t.zoom=data.zoom||1;t.pan=data.pan||{x:0,y:0};t.objects=data.objects.map(o=>{if(typeof o.img==='string'){const im=new Image();im.onload=redraw;im.src=o.img;o.img=im;}if(!o.id)o.id=uid();return o;});e.target.value='';renderTabs();redraw();scheduleAutosave();showToast('Loaded');});
-document.getElementById('clear-btn').onclick=()=>{if(!confirm('Clear this tab?'))return;pushUndo();activeTab().objects=[];invalidateCommitted();state.selectedId=null;redraw();scheduleAutosave();};
+document.getElementById('clear-btn').onclick=()=>{if(!confirm('Clear this tab?'))return;pushUndo();activeTab().objects=[];invalidateCommitted();state.selectedId=null;RULER.visible=false;rulerWrap.classList.remove('show');document.getElementById('ruler-btn').classList.remove('active-tool');PROT.visible=false;protractorWrap.style.display='none';PROT.measAngle=null;PROT.measuring=false;document.getElementById('protractor-btn').classList.remove('active-tool');redraw();scheduleAutosave();};
 document.getElementById('help-btn').onclick=()=>document.getElementById('help-modal').classList.add('show');
 
 const BG_MODES=['lined','dots','plain'],BG_LABELS={lined:'\uD83D\uDCD3 Vở kẻ',dots:'· Chấm',plain:'⬜ Trắng'};
