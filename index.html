@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Whiteboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none}
 html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;background:#1a1a1a;color:#eee}
@@ -398,7 +399,35 @@ if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudfl
 document.getElementById('import-pdf-btn').onclick=()=>document.getElementById('file-pdf').click();
 document.getElementById('file-pdf').addEventListener('change',async e=>{if(!window.pdfjsLib){showToast('PDF.js did not load');return;}const file=e.target.files[0];if(!file)return;showToast('Loading PDF...');const buf=await file.arrayBuffer(),pdf=await pdfjsLib.getDocument({data:buf}).promise,t=activeTab();pushUndo();for(let i=1;i<=pdf.numPages;i++){const page=await pdf.getPage(i),scale=(NB.contentW*2)/page.getViewport({scale:1}).width,vp=page.getViewport({scale}),canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const img=new Image();await new Promise(res=>{img.onload=res;img.src=canvas.toDataURL();});t.objects.push({id:uid(),type:'image',img,x:NB.marginLeft,y:(i-1)*NB.pageH+NB.titleH,w:NB.contentW/2,h:NB.contentH/2});}invalidateCommitted();e.target.value='';redraw();scheduleAutosave();showToast(`Imported ${pdf.numPages} page(s)`);});
 
-document.getElementById('save-btn').onclick=()=>{const t=activeTab(),data={name:t.name,zoom:t.zoom,pan:t.pan,objects:t.objects.map(o=>{const c={...o};if(c.img)c.img=c.img.src;return c;})},blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t.name.replace(/[^\w]/g,'_')}.whiteboard.json`;a.click();URL.revokeObjectURL(url);showToast('Saved');};
+async function exportTabToPDF(t){
+if(!(window.jspdf&&window.jspdf.jsPDF)){showToast('Không tải được thư viện PDF');return;}
+const pxW=NB.pageW,pxH=NB.pageH-NB.pageGap,scale=2;
+let maxPageIdx=0;
+t.objects.forEach(o=>{const b=getBounds(o),bottomPage=Math.floor((b.y+b.h)/NB.pageH);if(bottomPage>maxPageIdx)maxPageIdx=bottomPage;});
+const{jsPDF}=window.jspdf;
+const pdf=new jsPDF({unit:'px',format:[pxW,pxH],hotfixes:['px_scaling']});
+for(let pi=0;pi<=maxPageIdx;pi++){
+const canvas=document.createElement('canvas');
+canvas.width=pxW*scale;canvas.height=pxH*scale;
+const c=canvas.getContext('2d');
+c.setTransform(scale,0,0,scale,0,0);
+const pageTop=pi*NB.pageH;
+_renderBg(c,{zoom:1,pan:{x:0,y:-pageTop}},pxW,pxH);
+c.save();
+c.translate(0,-pageTop);
+for(const o of t.objects){
+const b=getBounds(o);
+if(b.y+b.h<pageTop-5||b.y>pageTop+pxH+5)continue;
+drawObject(c,o);
+}
+c.restore();
+const imgData=canvas.toDataURL('image/jpeg',0.92);
+if(pi>0)pdf.addPage([pxW,pxH]);
+pdf.addImage(imgData,'JPEG',0,0,pxW,pxH);
+}
+pdf.save(`${t.name.replace(/[^\w]/g,'_')}.pdf`);
+}
+document.getElementById('save-btn').onclick=()=>{const t=activeTab();showToast('Đang xuất PDF...');setTimeout(()=>{exportTabToPDF(t).then(()=>showToast('Đã lưu PDF')).catch(err=>{console.error(err);showToast('Lỗi khi xuất PDF');});},30);};
 document.getElementById('load-btn').onclick=()=>document.getElementById('file-load').click();
 document.getElementById('file-load').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;const data=JSON.parse(await file.text()),t=newTab(data.name||'Loaded');t.zoom=data.zoom||1;t.pan=data.pan||{x:0,y:0};t.objects=data.objects.map(o=>{if(typeof o.img==='string'){const im=new Image();im.onload=redraw;im.src=o.img;o.img=im;}if(!o.id)o.id=uid();return o;});e.target.value='';renderTabs();redraw();scheduleAutosave();showToast('Loaded');});
 document.getElementById('clear-btn').onclick=()=>{if(!confirm('Clear this tab?'))return;pushUndo();activeTab().objects=[];invalidateCommitted();state.selectedId=null;redraw();scheduleAutosave();};
